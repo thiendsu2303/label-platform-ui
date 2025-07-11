@@ -3,12 +3,12 @@
 import type React from "react"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { Upload, Save, Trash2, Zap, Menu, FolderOpen, Eye } from "lucide-react"
+import { Upload, Save, Trash2, Zap, Menu, FolderOpen, Eye } from "lucide-react" // Đảm bảo import đủ các icon
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select" // Import Select components
+import { Badge } from "@/components/ui/badge" // Import Badge
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet" // Import Sheet components
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import { AppHeader } from "@/components/app-header" // Đảm bảo import này tồn tại
 
 interface Annotation {
   id: string
@@ -349,20 +350,22 @@ export default function UIAnnotationApp() {
 
   return (
     <div className="flex flex-col h-screen w-full">
-      {/* Top Navigation Bar */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-4">
-          {/* Logo and Title */}
-          <div className="flex items-center gap-2 mr-6">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Zap className="h-4 w-4" />
-            </div>
-            <div className="hidden sm:block">
-              <h1 className="text-lg font-semibold">UI Annotator</h1>
-              {currentProjectName && <p className="text-xs text-muted-foreground">{currentProjectName}</p>}
-            </div>
-          </div>
+      {/* Thanh điều hướng chung */}
+      <AppHeader />
 
+      {/* Thanh công cụ riêng cho trang Main */}
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex h-14 items-center px-4">
+          {" "}
+          {/* Giảm chiều cao một chút so với header chính */}
+          {/* Tên Project hiện tại */}
+          <div className="flex items-center gap-2 mr-6">
+            {currentProjectName && (
+              <div className="hidden sm:block">
+                <p className="text-sm font-semibold text-foreground">{currentProjectName}</p>
+              </div>
+            )}
+          </div>
           {/* Main Controls */}
           <div className="flex items-center gap-2 flex-1">
             {/* Upload Button */}
@@ -416,7 +419,6 @@ export default function UIAnnotationApp() {
               </Button>
             </div>
           </div>
-
           {/* Right Panel Controls */}
           <div className="flex items-center gap-2 ml-4">
             {image && (
@@ -495,14 +497,12 @@ export default function UIAnnotationApp() {
                             {new Date(project.updatedAt).toLocaleDateString()}
                           </p>
                         </div>
-                        <div className="flex gap-1">
-                          <Button onClick={() => loadProject(project)} variant="outline" size="sm">
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                          <Button onClick={() => deleteProject(project.id)} variant="outline" size="sm">
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
+                        <Button onClick={() => loadProject(project)} variant="outline" size="sm">
+                          <Eye className="h-3 w-3" />
+                        </Button>
+                        <Button onClick={() => deleteProject(project.id)} variant="outline" size="sm">
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
                     </Card>
                   ))}
@@ -516,7 +516,7 @@ export default function UIAnnotationApp() {
             </Sheet>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Project Name Dialog */}
       <Dialog open={isNameDialogOpen} onOpenChange={setIsNameDialogOpen}>
@@ -629,9 +629,7 @@ export default function UIAnnotationApp() {
                             ? "rgba(59, 130, 246, 0.1)"
                             : annotation.label === "Input"
                               ? "rgba(34, 197, 94, 0.1)"
-                              : annotation.label === "Radio"
-                                ? "rgba(168, 85, 247, 0.1)"
-                                : "rgba(249, 115, 22, 0.1)"
+                              : "rgba(168, 85, 247, 0.1)"
                         } 8px
                       )`,
                     }}

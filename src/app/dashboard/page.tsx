@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { BarChart2, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts"
+import { AppHeader } from "@/components/app-header"
 
 // Re-using interfaces from app/main/page.tsx
 interface Annotation {
@@ -223,187 +224,225 @@ export default function DashboardPage() {
     : []
 
   return (
-    <div className="flex h-screen w-full">
-      {/* Left Panel: Project List */}
-      <div className="w-full md:w-1/3 lg:w-1/4 border-r bg-background p-4 overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">Your Projects ({savedProjects.length})</h2>
-        {savedProjects.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No saved projects yet. Go to /main to create one.</p>
-        ) : (
-          <div className="space-y-3">
-            {savedProjects.map((project) => (
-              <Card
-                key={project.id}
-                className={`p-3 cursor-pointer hover:bg-muted ${
-                  selectedProjectResults?.project.id === project.id ? "border-primary ring-2 ring-primary" : ""
-                }`}
-                onClick={() => handleEvaluateProject(project)}
-              >
-                <div className="flex items-center gap-3">
-                  <img
-                    src={project.image || "/placeholder.svg"}
-                    alt={project.name}
-                    className="w-16 h-16 object-cover rounded border"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium truncate">{project.name}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {project.annotations.length} annotation{project.annotations.length !== 1 ? "s" : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{new Date(project.updatedAt).toLocaleDateString()}</p>
+    <div className="flex flex-col h-screen w-full bg-gray-50 dark:bg-gray-950">
+      <AppHeader />
+      {/* Đây là header mới */}
+      <div className="flex-1 flex">
+        {/* Phần nội dung còn lại */}
+        {/* Left Panel: Project List */}
+        <div className="w-full md:w-1/3 lg:w-1/4 border-r bg-background dark:bg-gray-900 p-4 overflow-y-auto shadow-md">
+          <h2 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-100">Your Projects</h2>
+          {savedProjects.length === 0 ? (
+            <p className="text-muted-foreground text-sm p-4 text-center border border-dashed rounded-lg">
+              No saved projects yet. Go to <code className="font-mono text-sm bg-muted px-1 py-0.5 rounded">/main</code>{" "}
+              to create one.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {savedProjects.map((project) => (
+                <Card
+                  key={project.id}
+                  className={`p-3 cursor-pointer transition-all duration-200 ease-in-out hover:bg-muted/50 dark:hover:bg-gray-800 ${
+                    selectedProjectResults?.project.id === project.id
+                      ? "border-primary ring-2 ring-primary shadow-lg"
+                      : "border-transparent"
+                  }`}
+                  onClick={() => handleEvaluateProject(project)}
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={project.image || "/placeholder.svg"}
+                      alt={project.name}
+                      className="w-16 h-16 object-cover rounded-md border border-gray-200 dark:border-gray-700"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold truncate text-gray-900 dark:text-gray-50">{project.name}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {project.annotations.length} annotation{project.annotations.length !== 1 ? "s" : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Last updated: {new Date(project.updatedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteProject(project.id)
+                      }}
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteProject(project.id)
-                    }}
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right Panel: Evaluation Report */}
+        <div className="flex-1 p-6 overflow-y-auto bg-gray-100 dark:bg-gray-950">
+          {!selectedProjectResults ? (
+            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+              <BarChart2 className="h-20 w-20 mb-6 text-gray-400 dark:text-gray-600" />
+              <h3 className="text-2xl font-semibold text-gray-700 dark:text-gray-200">
+                Select a Project to View Evaluation
+              </h3>
+              <p className="text-base mt-2 max-w-md">
+                Click on any project from the left panel to see its LLM prediction performance metrics and detailed
+                reports.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-8 max-w-4xl mx-auto">
+              <h2 className="text-4xl font-extrabold text-center text-gray-900 dark:text-gray-50 mb-8">
+                Evaluation Report for "{selectedProjectResults.project.name}"
+              </h2>
+
+              {/* Summary Metrics */}
+              <Card className="shadow-lg border-t-4 border-primary-foreground dark:border-primary-foreground/50">
+                <CardHeader>
+                  <CardTitle className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                    Overall Performance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                    <div className="p-4 bg-muted/30 dark:bg-muted/20 rounded-lg">
+                      <p className="text-sm text-muted-foreground mb-1">Average Precision</p>
+                      <p className="text-4xl font-extrabold text-[hsl(var(--chart-precision))]">
+                        {(chartData.reduce((sum, d) => sum + d.Precision, 0) / chartData.length || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-muted/30 dark:bg-muted/20 rounded-lg">
+                      <p className="text-sm text-muted-foreground mb-1">Average Recall</p>
+                      <p className="text-4xl font-extrabold text-[hsl(var(--chart-recall))]">
+                        {(chartData.reduce((sum, d) => sum + d.Recall, 0) / chartData.length || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-muted/30 dark:bg-muted/20 rounded-lg">
+                      <p className="text-sm text-muted-foreground mb-1">Average F1-score</p>
+                      <p className="text-4xl font-extrabold text-[hsl(var(--chart-f1))]">
+                        {(chartData.reduce((sum, d) => sum + d.F1, 0) / chartData.length || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
               </Card>
-            ))}
-          </div>
-        )}
-      </div>
 
-      {/* Right Panel: Evaluation Report */}
-      <div className="flex-1 p-6 overflow-y-auto bg-gray-50">
-        {!selectedProjectResults ? (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-            <BarChart2 className="h-16 w-16 mb-4" />
-            <h3 className="text-xl font-semibold">Select a Project to View Evaluation</h3>
-            <p className="text-sm">Click on a project from the left panel to see its LLM prediction performance.</p>
-          </div>
-        ) : (
-          <div className="space-y-8">
-            <h2 className="text-3xl font-bold text-center text-gray-800">
-              Evaluation Report for "{selectedProjectResults.project.name}"
-            </h2>
+              {/* Charts */}
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                    Metrics by Label
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" className="text-sm text-muted-foreground" />
+                      <YAxis domain={[0, 1]} className="text-sm text-muted-foreground" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          borderColor: "hsl(var(--border))",
+                          borderRadius: "0.5rem",
+                        }}
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                        itemStyle={{ color: "hsl(var(--foreground))" }}
+                      />
+                      <Legend wrapperStyle={{ paddingTop: "10px" }} />
+                      <Bar
+                        dataKey="Precision"
+                        fill="hsl(var(--chart-precision))"
+                        name="Precision"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar dataKey="Recall" fill="hsl(var(--chart-recall))" name="Recall" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="F1" fill="hsl(var(--chart-f1))" name="F1-score" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
 
-            {/* Summary Metrics */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Overall Performance</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Average Precision</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {(chartData.reduce((sum, d) => sum + d.Precision, 0) / chartData.length || 0).toFixed(2)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Average Recall</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      {(chartData.reduce((sum, d) => sum + d.Recall, 0) / chartData.length || 0).toFixed(2)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Average F1-score</p>
-                    <p className="text-2xl font-bold text-purple-600">
-                      {(chartData.reduce((sum, d) => sum + d.F1, 0) / chartData.length || 0).toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Charts */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Metrics by Label</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis domain={[0, 1]} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Precision" fill="#3b82f6" name="Precision" />
-                    <Bar dataKey="Recall" fill="#22c55e" name="Recall" />
-                    <Bar dataKey="F1" fill="#a855f7" name="F1-score" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Detailed Table */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Detailed Metrics</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Label
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          GT Boxes
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          TP
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          FP
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          FN
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Precision
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Recall
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          F1-score
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {Object.entries(selectedProjectResults.results).map(([label, metrics]) => (
-                        <tr key={label}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{label}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {metrics.total_ground_truth}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {metrics.true_positives}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {metrics.false_positives}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {metrics.false_negatives}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {metrics.precision.toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {metrics.recall.toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {metrics.f1_score.toFixed(2)}
-                          </td>
+              {/* Detailed Table */}
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                    Detailed Metrics
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            Label
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            GT Boxes
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            TP
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            FP
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            FN
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            Precision
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            Recall
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            F1-score
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                        {Object.entries(selectedProjectResults.results).map(([label, metrics]) => (
+                          <tr key={label} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-50">
+                              {label}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                              {metrics.total_ground_truth}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                              {metrics.true_positives}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                              {metrics.false_positives}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                              {metrics.false_negatives}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                              {metrics.precision.toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                              {metrics.recall.toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                              {metrics.f1_score.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
