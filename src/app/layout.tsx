@@ -18,7 +18,7 @@ export default function RootLayout({
       <body>
         {children}
         {/* Global toast portal */}
-        <Toaster richColors position="top-right" />
+        <Toaster richColors position="bottom-left" className="custom-sonner-toaster" />
       </body>
     </html>
   )
