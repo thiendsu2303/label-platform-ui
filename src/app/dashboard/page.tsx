@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { BarChart2, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts"
-import { AppHeader } from "@/components/app-header"
+import { AppHeader } from "@/components/header"
 
 // Re-using interfaces from app/main/page.tsx
 interface Annotation {
