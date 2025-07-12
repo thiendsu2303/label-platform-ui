@@ -995,9 +995,20 @@ export default function UIAnnotationApp() {
 }} variant="outline" size="icon" className="h-8 w-8">
   <Eye className="h-4 w-4" />
 </Button>
-                                <Button onClick={() => deleteProject(project.id)} variant="outline" size="icon" className="h-8 w-8">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <Button onClick={async () => {
+  try {
+    const response = await fetch(`http://localhost:8080/api/v1/images/${project.id}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) throw new Error('Failed to delete project')
+    toast('Project deleted', { description: 'Project has been deleted successfully.' })
+    await fetchProjectsFromAPI()
+  } catch (err) {
+    toast('Delete failed', { description: err instanceof Error ? err.message : 'Unknown error' })
+  }
+}} variant="outline" size="icon" className="h-8 w-8">
+  <Trash2 className="h-4 w-4" />
+</Button>
                               </div>
                             </div>
                             <div className="flex items-center gap-3 mt-1">
