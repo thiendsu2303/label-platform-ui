@@ -89,6 +89,7 @@ export default function UIAnnotationApp() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isLoadingProjects, setIsLoadingProjects] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
 
   const imageRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -697,9 +698,9 @@ export default function UIAnnotationApp() {
           <div className="flex items-center gap-2 flex-wrap">
             {" "}
             {/* Sử dụng flex-wrap để các nút xuống dòng nếu không đủ chỗ */}
-            {currentProjectName && (
+            {/* {currentProjectName && (
               <p className="text-sm font-semibold text-foreground hidden sm:block mr-2">{currentProjectName}</p>
-            )}
+            )} */}
             {/* Nút New Project thay cho Upload */}
             <Button
               onClick={() => {
@@ -776,6 +777,78 @@ export default function UIAnnotationApp() {
                 </>
               )}
             </Button>
+            {/* Nút Update chỉ hiện khi đang mở project đã có */}
+            {currentProjectId && (
+              <Button
+                onClick={async () => {
+                  setIsUpdating(true)
+                  try {
+                    // Map annotations sang format API
+                    const elements = annotations.map(ann => {
+                      if (ann.label === "Button") {
+                        return {
+                          type: "button",
+                          text: "Button",
+                          position: { x: ann.x, y: ann.y },
+                          width: ann.width,
+                          height: ann.height
+                        }
+                      } else if (ann.label === "Input") {
+                        return {
+                          type: "input",
+                          placeholder: "Input",
+                          position: { x: ann.x, y: ann.y },
+                          width: ann.width,
+                          height: ann.height
+                        }
+                      } else if (ann.label === "Radio") {
+                        return {
+                          type: "radio",
+                          position: { x: ann.x, y: ann.y },
+                          width: ann.width,
+                          height: ann.height
+                        }
+                      } else if (ann.label === "Drop") {
+                        return {
+                          type: "drop",
+                          position: { x: ann.x, y: ann.y },
+                          width: ann.width,
+                          height: ann.height
+                        }
+                      }
+                    })
+                    const response = await fetch(`http://localhost:8080/api/v1/images/${currentProjectId}/ground-truth`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ ground_truth: { elements } })
+                    })
+                    if (!response.ok) throw new Error(`Update failed: ${response.status}`)
+                    // const data = await response.json()
+                    toast("Project updated!", { description: "Annotations have been updated on server." })
+                    // Không setAnnotations từ API response, giữ nguyên UI
+                  } catch (err) {
+                    toast("Update failed", { description: err instanceof Error ? err.message : "Unknown error" })
+                  } finally {
+                    setIsUpdating(false)
+                  }
+                }}
+                disabled={isUpdating || !image || !currentProjectName}
+                variant="secondary"
+                size="sm"
+              >
+                {isUpdating ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    Update
+                  </>
+                )}
+              </Button>
+            )}
             <Button onClick={exportAnnotations} disabled={annotations.length === 0} variant="outline" size="sm">
               <Upload className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">Export</span>
@@ -888,9 +961,40 @@ export default function UIAnnotationApp() {
                             <div className="flex items-center justify-between gap-2">
                               <span className="font-semibold text-base truncate max-w-[140px]">{project.name}</span>
                               <div className="flex gap-1">
-                                <Button onClick={() => loadProject(project)} variant="outline" size="icon" className="h-8 w-8">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
+                                <Button onClick={async () => {
+  try {
+    const response = await fetch(`http://localhost:8080/api/v1/images/${project.id}`)
+    if (!response.ok) throw new Error('Failed to fetch project detail')
+    const data = await response.json()
+    // Mapping ground_truth.elements về annotation frontend
+    const elements = data.ground_truth?.elements || []
+    const mappedAnnotations = elements.map((el: any, idx: number) => {
+      let label = "Button"
+      if (el.type === "button") label = "Button"
+      else if (el.type === "input") label = "Input"
+      else if (el.type === "radio") label = "Radio"
+      else if (el.type === "drop") label = "Drop"
+      return {
+        id: `${el.type}-${el.position?.x || 0}-${el.position?.y || 0}-${idx}`,
+        x: el.position?.x || 0,
+        y: el.position?.y || 0,
+        width: el.width || 60,
+        height: el.height || 30,
+        label,
+      }
+    })
+    setImage(data.image_url)
+    setCurrentProjectName(data.name)
+    setCurrentProjectId(data.id)
+    setAnnotations(mappedAnnotations)
+    toast("Project loaded", { description: `Project '${data.name}' loaded from server.` })
+    setIsProjectsOpen(false)
+  } catch (err) {
+    toast("Failed to load project", { description: err instanceof Error ? err.message : "Unknown error" })
+  }
+}} variant="outline" size="icon" className="h-8 w-8">
+  <Eye className="h-4 w-4" />
+</Button>
                                 <Button onClick={() => deleteProject(project.id)} variant="outline" size="icon" className="h-8 w-8">
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
