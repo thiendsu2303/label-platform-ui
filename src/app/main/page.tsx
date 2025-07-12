@@ -123,7 +123,7 @@ export default function UIAnnotationApp() {
         id: item.id,
         name: item.name,
         image: item.image_url, // Use MinIO URL from API
-        annotations: item.ground_truth?.annotations || [],
+        annotations: item.ground_truth?.elements || [], // lấy đúng số annotation thực tế
         createdAt: item.created_at,
         updatedAt: item.updated_at,
       }))
