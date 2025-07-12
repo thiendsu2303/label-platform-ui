@@ -6,8 +6,21 @@ import { Zap, LayoutDashboard, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-export function AppHeader() {
+interface AppHeaderProps {
+  onNavigation?: (href: string) => boolean
+}
+
+export function AppHeader({ onNavigation }: AppHeaderProps) {
   const pathname = usePathname()
+
+  const handleLinkClick = (href: string, e: React.MouseEvent) => {
+    if (onNavigation) {
+      const canNavigate = onNavigation(href)
+      if (!canNavigate) {
+        e.preventDefault()
+      }
+    }
+  }
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
@@ -31,7 +44,7 @@ export function AppHeader() {
               pathname === "/main" && "text-foreground font-semibold",
             )}
           >
-            <Link href="/main">
+            <Link href="/main" onClick={(e) => handleLinkClick("/main", e)}>
               <ImageIcon className="mr-2 h-4 w-4" />
               Annotate
             </Link>
@@ -45,7 +58,7 @@ export function AppHeader() {
               pathname === "/dashboard" && "text-foreground font-semibold",
             )}
           >
-            <Link href="/dashboard">
+            <Link href="/dashboard" onClick={(e) => handleLinkClick("/dashboard", e)}>
               <LayoutDashboard className="mr-2 h-4 w-4" />
               Dashboard
             </Link>

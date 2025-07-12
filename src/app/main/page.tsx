@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Upload, Save, Trash2, Zap, Menu, FolderOpen, Eye } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -67,6 +68,7 @@ const LABEL_VARIANTS = {
 } as const
 
 export default function UIAnnotationApp() {
+  const router = useRouter()
   const [image, setImage] = useState<string | null>(null)
   const [currentProjectName, setCurrentProjectName] = useState<string>("")
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
@@ -79,9 +81,13 @@ export default function UIAnnotationApp() {
   const [isAnnotationsOpen, setIsAnnotationsOpen] = useState(false)
   const [isProjectsOpen, setIsProjectsOpen] = useState(false)
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false)
+  const [isUnsavedChangesDialogOpen, setIsUnsavedChangesDialogOpen] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [projectName, setProjectName] = useState("")
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([])
   const [pendingImageFile, setPendingImageFile] = useState<string | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
 
   const imageRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -103,6 +109,78 @@ export default function UIAnnotationApp() {
   useEffect(() => {
     localStorage.setItem("ui-annotation-projects", JSON.stringify(savedProjects))
   }, [savedProjects])
+
+  // Track unsaved changes
+  useEffect(() => {
+    // Set hasUnsavedChanges to true if there's an image with project name but no annotations
+    if (image && currentProjectName && annotations.length === 0) {
+      setHasUnsavedChanges(true)
+      console.log("Has unsaved changes: true", { image: !!image, projectName: currentProjectName, annotationsCount: annotations.length })
+    } else {
+      setHasUnsavedChanges(false)
+      console.log("Has unsaved changes: false", { image: !!image, projectName: currentProjectName, annotationsCount: annotations.length })
+    }
+  }, [image, currentProjectName, annotations])
+
+  // Add beforeunload event listener
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault()
+        e.returnValue = "You haven't labeled anything yet. Do you want to save this project? If yes, it will be saved with empty annotations."
+        return "You haven't labeled anything yet. Do you want to save this project? If yes, it will be saved with empty annotations."
+      }
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+  }, [hasUnsavedChanges])
+
+  // Handle navigation with unsaved changes
+  useEffect(() => {
+    const handleBeforeNavigate = () => {
+      if (hasUnsavedChanges) {
+        // For browser back/forward, we'll use the simple confirm
+        // since we can't show custom dialog during page unload
+        const confirmed = window.confirm("You haven't labeled anything yet. Do you want to save this project? If yes, it will be saved with empty annotations.")
+        if (confirmed) {
+          // Auto-save the project with empty annotations
+          if (image && currentProjectName && currentProjectId) {
+            const projectData: SavedProject = {
+              id: currentProjectId,
+              name: currentProjectName,
+              image,
+              annotations: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+
+            // Save to localStorage directly since we can't update state during unload
+            const saved = localStorage.getItem("ui-annotation-projects")
+            const projects = saved ? JSON.parse(saved) : []
+            const existingIndex = projects.findIndex((p: SavedProject) => p.id === currentProjectId)
+            
+            if (existingIndex >= 0) {
+              projects[existingIndex] = { ...projectData, createdAt: projects[existingIndex].createdAt }
+            } else {
+              projects.push(projectData)
+            }
+            
+            localStorage.setItem("ui-annotation-projects", JSON.stringify(projects))
+          }
+        }
+      }
+    }
+
+    // Listen for popstate events (back/forward navigation)
+    window.addEventListener("popstate", handleBeforeNavigate)
+    
+    return () => {
+      window.removeEventListener("popstate", handleBeforeNavigate)
+    }
+  }, [hasUnsavedChanges, image, currentProjectName, currentProjectId])
 
   const handleImageUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -214,35 +292,136 @@ export default function UIAnnotationApp() {
     })
   }, [])
 
-  const saveProject = useCallback(() => {
+  // Function to upload image to backend
+  const uploadImageToBackend = useCallback(async (imageFile: File, groundTruth?: any) => {
+    try {
+      setIsUploading(true)
+      
+      const formData = new FormData()
+      formData.append('image', imageFile)
+      
+      if (groundTruth) {
+        formData.append('ground_truth', JSON.stringify(groundTruth))
+      }
+
+      const response = await fetch('http://localhost:8080/api/v1/images/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`)
+      }
+
+      const result = await response.json()
+      
+      toast("Image uploaded successfully", {
+        description: `Image "${result.name}" has been uploaded to the server.`,
+      })
+
+      return result
+    } catch (error) {
+      console.error('Upload error:', error)
+      toast("Upload failed", {
+        description: error instanceof Error ? error.message : "Failed to upload image",
+      })
+      throw error
+    } finally {
+      setIsUploading(false)
+    }
+  }, [])
+
+  // Function to convert base64 to File object
+  const base64ToFile = useCallback((base64String: string, filename: string): File => {
+    const arr = base64String.split(',')
+    const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png'
+    const bstr = atob(arr[1])
+    let n = bstr.length
+    const u8arr = new Uint8Array(n)
+    
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n)
+    }
+    
+    return new File([u8arr], filename, { type: mime })
+  }, [])
+
+  const saveProject = useCallback(async () => {
     if (!image || !currentProjectName || !currentProjectId) return
 
-    const projectData: SavedProject = {
-      id: currentProjectId,
-      name: currentProjectName,
-      image,
-      annotations,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-
-    setSavedProjects((prev) => {
-      const existingIndex = prev.findIndex((p) => p.id === currentProjectId)
-      if (existingIndex >= 0) {
-        // Update existing project
-        const updated = [...prev]
-        updated[existingIndex] = { ...projectData, createdAt: prev[existingIndex].createdAt }
-        return updated
-      } else {
-        // Add new project
-        return [...prev, projectData]
+    try {
+      // Convert base64 image to File object
+      const imageFile = base64ToFile(image, `${currentProjectName}.png`)
+      
+      // Prepare ground truth data
+      const groundTruth = {
+        project_name: currentProjectName,
+        annotations: annotations,
+        total_annotations: annotations.length,
+        created_at: new Date().toISOString(),
       }
-    })
 
-    toast("Project saved", {
-      description: `"${currentProjectName}" has been saved successfully.`,
-    })
-  }, [image, currentProjectName, currentProjectId, annotations])
+      // Upload to backend
+      const uploadResult = await uploadImageToBackend(imageFile, groundTruth)
+
+      // Update local storage with MinIO URL
+      const projectData: SavedProject = {
+        id: currentProjectId,
+        name: currentProjectName,
+        image: uploadResult.image_url, // Use MinIO URL instead of base64
+        annotations,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+
+      setSavedProjects((prev) => {
+        const existingIndex = prev.findIndex((p) => p.id === currentProjectId)
+        if (existingIndex >= 0) {
+          // Update existing project
+          const updated = [...prev]
+          updated[existingIndex] = { ...projectData, createdAt: prev[existingIndex].createdAt }
+          return updated
+        } else {
+          // Add new project
+          return [...prev, projectData]
+        }
+      })
+
+      setHasUnsavedChanges(false)
+
+      toast("Project saved and uploaded", {
+        description: `"${currentProjectName}" has been saved and uploaded to server successfully.`,
+      })
+    } catch (error) {
+      console.error('Save project error:', error)
+      // Fallback to local save only
+      const projectData: SavedProject = {
+        id: currentProjectId,
+        name: currentProjectName,
+        image,
+        annotations,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+
+      setSavedProjects((prev) => {
+        const existingIndex = prev.findIndex((p) => p.id === currentProjectId)
+        if (existingIndex >= 0) {
+          const updated = [...prev]
+          updated[existingIndex] = { ...projectData, createdAt: prev[existingIndex].createdAt }
+          return updated
+        } else {
+          return [...prev, projectData]
+        }
+      })
+
+      setHasUnsavedChanges(false)
+
+      toast("Project saved locally", {
+        description: `"${currentProjectName}" has been saved locally (upload failed).`,
+      })
+    }
+  }, [image, currentProjectName, currentProjectId, annotations, uploadImageToBackend, base64ToFile])
 
   const loadProject = useCallback((project: SavedProject) => {
     setImage(project.image)
@@ -348,10 +527,121 @@ export default function UIAnnotationApp() {
     }, 2000)
   }, [image])
 
+  // Function to handle navigation with unsaved changes
+  const handleNavigation = useCallback((href: string) => {
+    if (hasUnsavedChanges) {
+      setPendingNavigation(href)
+      setIsUnsavedChangesDialogOpen(true)
+      return false
+    }
+    return true
+  }, [hasUnsavedChanges])
+
+  // Function to handle save and continue navigation
+  const handleSaveAndNavigate = useCallback(async () => {
+    if (image && currentProjectName && currentProjectId) {
+      try {
+        // Convert base64 image to File object
+        const imageFile = base64ToFile(image, `${currentProjectName}.png`)
+        
+        // Prepare ground truth data
+        const groundTruth = {
+          project_name: currentProjectName,
+          annotations: [],
+          total_annotations: 0,
+          created_at: new Date().toISOString(),
+        }
+
+        // Upload to backend
+        const uploadResult = await uploadImageToBackend(imageFile, groundTruth)
+
+        // Update local storage with MinIO URL
+        const projectData: SavedProject = {
+          id: currentProjectId,
+          name: currentProjectName,
+          image: uploadResult.image_url, // Use MinIO URL instead of base64
+          annotations: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+
+        setSavedProjects((prev) => {
+          const existingIndex = prev.findIndex((p) => p.id === currentProjectId)
+          if (existingIndex >= 0) {
+            const updated = [...prev]
+            updated[existingIndex] = { ...projectData, createdAt: prev[existingIndex].createdAt }
+            return updated
+          } else {
+            return [...prev, projectData]
+          }
+        })
+
+        setHasUnsavedChanges(false)
+        setIsUnsavedChangesDialogOpen(false)
+        setPendingNavigation(null)
+        
+        toast("Project auto-saved and uploaded", {
+          description: `"${currentProjectName}" has been saved with empty annotations and uploaded to server.`,
+        })
+
+        // Navigate after saving
+        if (pendingNavigation) {
+          window.location.href = pendingNavigation
+        }
+      } catch (error) {
+        console.error('Auto-save error:', error)
+        // Fallback to local save only
+        const projectData: SavedProject = {
+          id: currentProjectId,
+          name: currentProjectName,
+          image,
+          annotations: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+
+        setSavedProjects((prev) => {
+          const existingIndex = prev.findIndex((p) => p.id === currentProjectId)
+          if (existingIndex >= 0) {
+            const updated = [...prev]
+            updated[existingIndex] = { ...projectData, createdAt: prev[existingIndex].createdAt }
+            return updated
+          } else {
+            return [...prev, projectData]
+          }
+        })
+
+        setHasUnsavedChanges(false)
+        setIsUnsavedChangesDialogOpen(false)
+        setPendingNavigation(null)
+
+        toast("Project auto-saved locally", {
+          description: `"${currentProjectName}" has been saved locally (upload failed).`,
+        })
+
+        // Navigate after saving
+        if (pendingNavigation) {
+          window.location.href = pendingNavigation
+        }
+      }
+    }
+  }, [image, currentProjectName, currentProjectId, uploadImageToBackend, base64ToFile, pendingNavigation])
+
+  // Function to handle discard and continue navigation
+  const handleDiscardAndNavigate = useCallback(() => {
+    setHasUnsavedChanges(false)
+    setIsUnsavedChangesDialogOpen(false)
+    
+    // Navigate without saving
+    if (pendingNavigation) {
+      window.location.href = pendingNavigation
+    }
+  }, [pendingNavigation])
+
   return (
     <div className="flex flex-col h-screen w-full">
       {/* Thanh điều hướng chung */}
-      <AppHeader />
+      <AppHeader onNavigation={handleNavigation} />
 
       {/* Thanh công cụ riêng cho trang Main */}
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -396,9 +686,18 @@ export default function UIAnnotationApp() {
               <Zap className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">Predict</span>
             </Button>
-            <Button onClick={saveProject} disabled={!image || !currentProjectName} size="sm">
-              <Save className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">Save</span>
+            <Button onClick={saveProject} disabled={!image || !currentProjectName || isUploading} size="sm">
+              {isUploading ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <span className="hidden sm:inline">Uploading...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  <span className="hidden sm:inline">Save</span>
+                </>
+              )}
             </Button>
             <Button onClick={exportAnnotations} disabled={annotations.length === 0} variant="outline" size="sm">
               <Upload className="mr-2 h-4 w-4" />
@@ -548,6 +847,59 @@ export default function UIAnnotationApp() {
             <Button onClick={handleProjectNameSubmit} disabled={!projectName.trim()}>
               Create Project
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unsaved Changes Dialog */}
+      <Dialog open={isUnsavedChangesDialogOpen} onOpenChange={setIsUnsavedChangesDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded bg-yellow-100 text-yellow-600">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              Unsaved Changes
+            </DialogTitle>
+            <DialogDescription className="text-left">
+              You haven't labeled anything yet. Do you want to save this project before leaving? If you save it, the project will be saved with empty annotations.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg my-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded bg-primary/10 text-primary">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{currentProjectName}</p>
+              <p className="text-xs text-muted-foreground">0 annotations</p>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleDiscardAndNavigate}
+              className="w-full sm:w-auto"
+            >
+              Discard & Leave
+            </Button>
+                            <Button 
+                  onClick={handleSaveAndNavigate}
+                  disabled={isUploading}
+                  className="w-full sm:w-auto"
+                >
+                  {isUploading ? (
+                    <>
+                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Uploading...
+                    </>
+                  ) : (
+                    "Save & Continue"
+                  )}
+                </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
