@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { Upload, Save, Trash2, Zap, Menu, FolderOpen, Eye } from "lucide-react"
+import { Upload, Save, Trash2, Zap, Menu, FolderOpen, Eye, Plus } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -88,20 +88,67 @@ export default function UIAnnotationApp() {
   const [pendingImageFile, setPendingImageFile] = useState<string | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false)
 
   const imageRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Load saved projects from localStorage on mount
+  // Load saved projects from API on mount
   useEffect(() => {
-    const saved = localStorage.getItem("ui-annotation-projects")
-    if (saved) {
-      try {
-        setSavedProjects(JSON.parse(saved))
-      } catch (error) {
-        console.error("Error loading saved projects:", error)
+    fetchProjectsFromAPI()
+  }, [])
+
+  // Function to fetch projects from API
+  const fetchProjectsFromAPI = useCallback(async () => {
+    try {
+      setIsLoadingProjects(true)
+      
+      const response = await fetch('http://localhost:8080/api/v1/images/', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch projects: ${response.status}`)
       }
+
+      const data = await response.json()
+      
+      // Transform API data to match our SavedProject interface
+      const transformedProjects: SavedProject[] = data.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        image: item.image_url, // Use MinIO URL from API
+        annotations: item.ground_truth?.annotations || [],
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+      }))
+
+      setSavedProjects(transformedProjects)
+      
+      toast("Projects loaded", {
+        description: `Loaded ${transformedProjects.length} projects from server.`,
+      })
+    } catch (error) {
+      console.error('Error fetching projects:', error)
+      toast("Failed to load projects", {
+        description: error instanceof Error ? error.message : "Could not load projects from server",
+      })
+      
+      // Fallback to localStorage if API fails
+      const saved = localStorage.getItem("ui-annotation-projects")
+      if (saved) {
+        try {
+          setSavedProjects(JSON.parse(saved))
+        } catch (localError) {
+          console.error("Error loading from localStorage:", localError)
+        }
+      }
+    } finally {
+      setIsLoadingProjects(false)
     }
   }, [])
 
@@ -653,19 +700,49 @@ export default function UIAnnotationApp() {
             {currentProjectName && (
               <p className="text-sm font-semibold text-foreground hidden sm:block mr-2">{currentProjectName}</p>
             )}
-            {/* Nút Upload */}
+            {/* Nút New Project thay cho Upload */}
             <Button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                setImage(null)
+                setCurrentProjectName("")
+                setCurrentProjectId(null)
+                setAnnotations([])
+                setSelectedAnnotation(null)
+                setIsDrawing(false)
+                setStartPoint(null)
+                setCurrentBox(null)
+                setSelectedLabel("Button")
+                setIsAnnotationsOpen(false)
+                setIsProjectsOpen(false)
+                setIsNameDialogOpen(false)
+                setProjectName("")
+                setPendingImageFile(null)
+              }}
               variant="outline"
               size="sm"
               className="hidden sm:flex"
             >
-              <Upload className="mr-2 h-4 w-4" />
-              Upload
+              <Plus className="mr-2 h-4 w-4" />
+              New Project
             </Button>
-            {/* Nút Upload cho mobile */}
-            <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="sm" className="sm:hidden">
-              <Upload className="h-4 w-4" />
+            {/* Nút New Project cho mobile */}
+            <Button onClick={() => {
+                setImage(null)
+                setCurrentProjectName("")
+                setCurrentProjectId(null)
+                setAnnotations([])
+                setSelectedAnnotation(null)
+                setIsDrawing(false)
+                setStartPoint(null)
+                setCurrentBox(null)
+                setSelectedLabel("Button")
+                setIsAnnotationsOpen(false)
+                setIsProjectsOpen(false)
+                setIsNameDialogOpen(false)
+                setProjectName("")
+                setPendingImageFile(null)
+              }} variant="outline" size="sm" className="sm:hidden">
+              <Plus className="h-4 w-4" />
             </Button>
             {/* Label Selector */}
             <Select value={selectedLabel} onValueChange={(value: Annotation["label"]) => setSelectedLabel(value)}>
@@ -763,42 +840,75 @@ export default function UIAnnotationApp() {
                   <span className="hidden sm:ml-2 sm:inline">Projects</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent className="w-[400px] sm:w-[540px]">
-                <SheetHeader>
-                  <SheetTitle>Saved Projects ({savedProjects.length})</SheetTitle>
-                  <SheetDescription>Your saved annotation projects</SheetDescription>
-                </SheetHeader>
-                <div className="mt-6 space-y-3">
-                  {savedProjects.map((project) => (
-                    <Card key={project.id} className="p-4">
-                      <div className="flex items-start gap-3">
-                        <img
-                          src={project.image || "/placeholder.svg"}
-                          alt={project.name}
-                          className="w-16 h-16 object-cover rounded border"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium truncate">{project.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {project.annotations.length} annotation{project.annotations.length !== 1 ? "s" : ""}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(project.updatedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <Button onClick={() => loadProject(project)} variant="outline" size="sm">
-                          <Eye className="h-3 w-3" />
-                        </Button>
-                        <Button onClick={() => deleteProject(project.id)} variant="outline" size="sm">
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </Card>
-                  ))}
-                  {savedProjects.length === 0 && (
-                    <div className="p-8 text-center text-sm text-muted-foreground">
-                      No saved projects yet. Create and save your first annotation project.
+              <SheetContent className="w-[400px] sm:w-[540px] px-0">
+                <DialogTitle className="sr-only">Saved Projects</DialogTitle>
+                <div className="px-6 pt-6 pb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold">Saved Projects ({savedProjects.length})</span>
+                      <Button 
+                        onClick={fetchProjectsFromAPI} 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-8 w-8 ml-1 border border-gray-200 hover:bg-gray-100"
+                        disabled={isLoadingProjects}
+                        aria-label="Refresh"
+                      >
+                        {isLoadingProjects ? (
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        ) : (
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        )}
+                      </Button>
                     </div>
+                    {/* Nút X đóng panel giữ nguyên */}
+                  </div>
+                  <div className="text-sm text-muted-foreground mt-1">Your saved annotation projects</div>
+                </div>
+                <div className="mt-2 space-y-4 px-4 pb-6">
+                  {isLoadingProjects ? (
+                    <div className="p-8 text-center">
+                      <div className="inline-flex items-center gap-2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        <span className="text-sm text-muted-foreground">Loading projects...</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {savedProjects.map((project) => (
+                        <Card key={project.id} className="p-4 rounded-2xl shadow border border-gray-100 flex flex-row items-center gap-4">
+                          <img
+                            src={project.image || "/placeholder.svg"}
+                            alt={project.name}
+                            className="w-14 h-14 object-cover rounded-lg border flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0 flex flex-col justify-center">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-base truncate max-w-[140px]">{project.name}</span>
+                              <div className="flex gap-1">
+                                <Button onClick={() => loadProject(project)} variant="outline" size="icon" className="h-8 w-8">
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button onClick={() => deleteProject(project.id)} variant="outline" size="icon" className="h-8 w-8">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-xs text-muted-foreground">{project.annotations.length} annotation{project.annotations.length !== 1 ? "s" : ""}</span>
+                              <span className="text-xs text-muted-foreground">{new Date(project.updatedAt).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                      {savedProjects.length === 0 && (
+                        <div className="p-8 text-center text-sm text-muted-foreground">
+                          No saved projects yet. Create and save your first annotation project.
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </SheetContent>
@@ -1011,9 +1121,7 @@ export default function UIAnnotationApp() {
                           ? "rgba(59, 130, 246, 0.15)"
                           : selectedLabel === "Input"
                             ? "rgba(34, 197, 94, 0.15)"
-                            : selectedLabel === "Radio"
-                              ? "rgba(168, 85, 247, 0.15)"
-                              : "rgba(249, 115, 22, 0.15)"
+                            : "rgba(168, 85, 247, 0.15)"
                       } 8px
                     )`,
                     }}
