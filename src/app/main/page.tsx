@@ -760,10 +760,33 @@ export default function UIAnnotationApp() {
               </SelectContent>
             </Select>
             {/* Các nút hành động chính */}
-            <Button onClick={handlePredict} disabled={!image} variant="secondary" size="sm">
-              <Zap className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">Predict</span>
-            </Button>
+            <Button onClick={async () => {
+  if (!currentProjectId) return
+  try {
+    const response = await fetch(`http://localhost:8080/api/v1/images/${currentProjectId}/predict`, {
+      method: 'GET'
+    })
+    if (response.status === 429) {
+      const data = await response.json()
+      toast.error(
+        'Rate limit exceeded',
+        {
+          description: `You can only request prediction for this image every 5 minutes. Please try again after ${data.retry_after_seconds || '?'} seconds.`,
+          style: { background: '#fee2e2', color: '#b91c1c', border: '1px solid #f87171' },
+          icon: '⏳',
+        }
+      )
+      return
+    }
+    if (!response.ok) throw new Error('Prediction request failed')
+    toast('Prediction started', { description: 'Image has been sent to models for automatic labeling.' })
+  } catch (err) {
+    toast('Prediction failed', { description: err instanceof Error ? err.message : 'Unknown error' })
+  }
+}} disabled={!image} variant="secondary" size="sm">
+  <Zap className="mr-2 h-4 w-4" />
+  <span className="hidden sm:inline">Predict</span>
+</Button>
             <Button onClick={saveProject} disabled={!image || !currentProjectName || isUploading} size="sm">
               {isUploading ? (
                 <>
