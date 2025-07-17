@@ -90,6 +90,8 @@ export default function UIAnnotationApp() {
   const [isUploading, setIsUploading] = useState(false)
   const [isLoadingProjects, setIsLoadingProjects] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [predictResults, setPredictResults] = useState<Record<string, any>>({});
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
 
   const imageRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -686,6 +688,21 @@ export default function UIAnnotationApp() {
     }
   }, [pendingNavigation])
 
+  useEffect(() => {
+    const eventSource = new EventSource('/webhook/predict');
+    eventSource.onmessage = (event) => {
+      const { image_id, model, result } = JSON.parse(event.data);
+      toast(
+        `Image ${image_id} has been predicted by model ${model}: ${result}`,
+        {
+          duration: 8000,
+          style: { border: '2px solid #3b82f6' }
+        }
+      );
+    };
+    return () => eventSource.close();
+  }, []);
+
   return (
     <div className="flex flex-col h-screen w-full">
       {/* Thanh điều hướng chung */}
@@ -974,7 +991,7 @@ export default function UIAnnotationApp() {
                   ) : (
                     <>
                       {savedProjects.map((project) => (
-                        <Card key={project.id} className="p-4 rounded-2xl shadow border border-gray-100 flex flex-row items-center gap-4">
+                        <Card key={project.id} className="p-4 rounded-2xl shadow border border-gray-100 flex flex-row items-center gap-4 mb-2 relative">
                           <img
                             src={project.image || "/placeholder.svg"}
                             alt={project.name}
@@ -1012,12 +1029,32 @@ export default function UIAnnotationApp() {
     setAnnotations(mappedAnnotations)
     toast("Project loaded", { description: `Project '${data.name}' loaded from server.` })
     setIsProjectsOpen(false)
+    // Gọi thêm API predict/model
+    const predictRes = await fetch(`http://localhost:8080/api/v1/images/${project.id}/predict/model`)
+    if (predictRes.ok) {
+      const predictData = await predictRes.json()
+      setPredictResults(prev => ({ ...prev, [project.id]: predictData.predicted_labels }))
+    }
+    setExpandedProject(project.id)
   } catch (err) {
     toast("Failed to load project", { description: err instanceof Error ? err.message : "Unknown error" })
   }
 }} variant="outline" size="icon" className="h-8 w-8">
   <Eye className="h-4 w-4" />
 </Button>
+<Button onClick={() => setExpandedProject(expandedProject === project.id ? null : project.id)} variant="ghost" size="icon" className="h-8 w-8">
+  <svg className={`h-4 w-4 transition-transform ${expandedProject === project.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+</Button>
+{expandedProject === project.id && (
+  <div className="mt-1 text-xs text-muted-foreground">
+    <span className="font-medium">Model predictions:</span>{' '}
+    {predictResults[project.id]
+      ? Object.entries(predictResults[project.id]).map(
+          ([model, value]: [string, any]) => `${model}: ${value.elements.length} elements`
+        ).join(' | ')
+      : 'No prediction results.'}
+  </div>
+)}
                                 <Button onClick={async () => {
   try {
     const response = await fetch(`http://localhost:8080/api/v1/images/${project.id}`, {
