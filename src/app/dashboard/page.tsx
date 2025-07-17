@@ -80,33 +80,35 @@ function evaluateSingleImage(
   const matchedPredIndices = new Set<number>()
 
   for (const gtBox of groundTruthAnnotations) {
-    metrics[gtBox.label].total_ground_truth++
-    let bestIoU = 0
-    let bestPredIndex = -1
+    if (!metrics[gtBox.label]) continue;
+    metrics[gtBox.label].total_ground_truth++;
+    let bestIoU = 0;
+    let bestPredIndex = -1;
 
     for (let i = 0; i < predictionAnnotations.length; i++) {
-      const predBox = predictionAnnotations[i]
+      const predBox = predictionAnnotations[i];
       if (predBox.label === gtBox.label && !matchedPredIndices.has(i)) {
-        const iou = calculateIoU(gtBox, predBox)
+        const iou = calculateIoU(gtBox, predBox);
         if (iou > bestIoU) {
-          bestIoU = iou
-          bestPredIndex = i
+          bestIoU = iou;
+          bestPredIndex = i;
         }
       }
     }
 
     if (bestIoU >= iouThreshold) {
-      metrics[gtBox.label].true_positives++
-      matchedPredIndices.add(bestPredIndex)
+      metrics[gtBox.label].true_positives++;
+      matchedPredIndices.add(bestPredIndex);
     } else {
-      metrics[gtBox.label].false_negatives++
+      metrics[gtBox.label].false_negatives++;
     }
   }
 
   for (let i = 0; i < predictionAnnotations.length; i++) {
     if (!matchedPredIndices.has(i)) {
-      const predBox = predictionAnnotations[i]
-      metrics[predBox.label].false_positives++
+      const predBox = predictionAnnotations[i];
+      if (!metrics[predBox.label]) continue;
+      metrics[predBox.label].false_positives++;
     }
   }
 
@@ -413,25 +415,25 @@ export default function DashboardPage() {
                               {label}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                              {metrics.total_ground_truth}
+                              {metrics?.total_ground_truth ?? 0}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                              {metrics.true_positives}
+                              {metrics?.true_positives ?? 0}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                              {metrics.false_positives}
+                              {metrics?.false_positives ?? 0}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                              {metrics.false_negatives}
+                              {metrics?.false_negatives ?? 0}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                              {metrics.precision.toFixed(2)}
+                              {(metrics?.precision ?? 0).toFixed(2)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                              {metrics.recall.toFixed(2)}
+                              {(metrics?.recall ?? 0).toFixed(2)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                              {metrics.f1_score.toFixed(2)}
+                              {(metrics?.f1_score ?? 0).toFixed(2)}
                             </td>
                           </tr>
                         ))}
